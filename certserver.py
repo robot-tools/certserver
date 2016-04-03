@@ -8,6 +8,11 @@ import ssl
 
 parser = argparse.ArgumentParser(description='certserver')
 parser.add_argument(
+    '--ca-cert',
+    dest='ca_cert',
+    action='store',
+    required=True)
+parser.add_argument(
     '--listen-host',
     dest='listen_host',
     action='store',
@@ -37,12 +42,13 @@ class HTTPServer6(server.HTTPServer):
 
 class CertServer(object):
 
-  def __init__(self, listen_host, listen_port, server_key, server_cert):
+  def __init__(self, listen_host, listen_port, server_key, server_cert, ca_cert):
     self._httpd = HTTPServer6((listen_host, listen_port), server.SimpleHTTPRequestHandler)
     self._httpd.socket = ssl.wrap_socket(
         self._httpd.socket,
         keyfile=server_key,
         certfile=server_cert,
+        ca_certs=ca_cert,
         server_side=True,
         cert_reqs=ssl.CERT_REQUIRED,
         ssl_version=ssl.PROTOCOL_TLSv1_2,
@@ -57,7 +63,8 @@ def main():
       FLAGS.listen_host,
       FLAGS.listen_port,
       FLAGS.server_key,
-      FLAGS.server_cert)
+      FLAGS.server_cert,
+      FLAGS.ca_cert)
   server.Serve()
 
 
