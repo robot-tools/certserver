@@ -43,7 +43,16 @@ class HTTPServer6(server.HTTPServer):
 class CertServer(object):
 
   def __init__(self, listen_host, listen_port, server_key, server_cert, ca_cert):
-    self._httpd = HTTPServer6((listen_host, listen_port), server.SimpleHTTPRequestHandler)
+
+    class RequestHandler(server.BaseHTTPRequestHandler):
+      def do_POST(self):
+        assert self.headers['Content-Type'] == 'application/x-pem-file'
+        size = int(self.headers['Content-Length'])
+        print(self.rfile.read(size))
+        self.send_response(200)
+        self.end_headers()
+
+    self._httpd = HTTPServer6((listen_host, listen_port), RequestHandler)
     self._httpd.socket = ssl.wrap_socket(
         self._httpd.socket,
         keyfile=server_key,

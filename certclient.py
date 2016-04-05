@@ -34,10 +34,13 @@ class CertClient(object):
     self._session = requests.Session()
     self._session.verify = ca_cert
     self._session.cert = (client_cert, client_key)
+    self._session.headers.update({
+      'Content-Type': 'application/x-pem-file',
+    })
     self._server = server
 
   def Request(self):
-    self._session.get(self._server)
+    self._session.post(self._server, data='foo')
 
 
 def main():
