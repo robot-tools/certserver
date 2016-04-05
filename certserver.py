@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 
 import argparse
+import json
 from http import server
 import socket
 import ssl
+import subprocess
 
 
 parser = argparse.ArgumentParser(description='certserver')
@@ -33,6 +35,11 @@ parser.add_argument(
     dest='server_cert',
     action='store',
     required=True)
+parser.add_argument(
+    '--sign-command',
+    dest='sign_command',
+    action='store',
+    required=True)
 FLAGS = parser.parse_args()
 
 
@@ -42,15 +49,31 @@ class HTTPServer6(server.HTTPServer):
 
 class CertServer(object):
 
-  def __init__(self, listen_host, listen_port, server_key, server_cert, ca_cert):
+  def __init__(self, listen_host, listen_port, server_key, server_cert, ca_cert, sign_command):
 
     class RequestHandler(server.BaseHTTPRequestHandler):
       def do_POST(self):
+        print('Request from: [%s]:%d' % (self.client_address[0], self.client_address[1]))
+        peer_cert = json.dumps(dict(x[0] for x in self.request.getpeercert()['subject']), sort_keys=True)
+        print('Client cert:\n\t%s' % peer_cert.replace('\n', '\n\t'))
         assert self.headers['Content-Type'] == 'application/x-pem-file'
         size = int(self.headers['Content-Length'])
-        print(self.rfile.read(size))
-        self.send_response(200)
-        self.end_headers()
+        cert = self.rfile.read(size)
+
+        with subprocess.Popen(sign_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+          proc.stdin.write(cert)
+          proc.stdin.close()
+          signed = proc.stdout.read()
+          stderr = proc.stderr.read().decode('ascii')
+          print('OpenSSL output:\n\t%s' % stderr.replace('\n', '\n\t').strip())
+          if proc.wait() == 0:
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/x-pem-file')
+            self.end_headers()
+            self.wfile.write(signed)
+          else:
+            self.send_response(500)
+            self.end_headers()
 
     self._httpd = HTTPServer6((listen_host, listen_port), RequestHandler)
     self._httpd.socket = ssl.wrap_socket(
@@ -73,7 +96,8 @@ def main():
       FLAGS.listen_port,
       FLAGS.server_key,
       FLAGS.server_cert,
-      FLAGS.ca_cert)
+      FLAGS.ca_cert,
+      FLAGS.sign_command)
   server.Serve()
 
 

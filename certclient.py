@@ -2,6 +2,7 @@
 
 import argparse
 import requests
+import sys
 
 
 parser = argparse.ArgumentParser(description='certclient')
@@ -21,11 +22,6 @@ parser.add_argument(
     action='store',
     required=True)
 parser.add_argument(
-    '--csr',
-    dest='csr',
-    action='store',
-    required=True)
-parser.add_argument(
     '--server',
     dest='server',
     action='store',
@@ -35,7 +31,7 @@ FLAGS = parser.parse_args()
 
 class CertClient(object):
 
-  def __init__(self, server, ca_cert, client_cert, client_key, csr):
+  def __init__(self, server, ca_cert, client_cert, client_key):
     self._session = requests.Session()
     self._session.verify = ca_cert
     self._session.cert = (client_cert, client_key)
@@ -43,11 +39,12 @@ class CertClient(object):
       'Content-Type': 'application/x-pem-file',
     })
     self._server = server
-    self._csr = csr
 
-  def Request(self):
-    with open(self._csr, 'r') as fh:
-      self._session.post(self._server, data=fh.read())
+  def Request(self, csr):
+    resp = self._session.post(self._server, data=csr)
+    assert resp.status_code == requests.codes.ok
+    assert resp.headers['Content-Type'] == 'application/x-pem-file'
+    return resp.text
 
 
 def main():
@@ -55,9 +52,9 @@ def main():
       FLAGS.server,
       FLAGS.ca_cert,
       FLAGS.client_cert,
-      FLAGS.client_key,
-      FLAGS.csr)
-  client.Request()
+      FLAGS.client_key)
+  cert = client.Request(sys.stdin.read())
+  print(cert, end='')
 
 
 if __name__ == '__main__':
