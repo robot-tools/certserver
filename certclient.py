@@ -42,8 +42,8 @@ class CertClient(object):
 
   def Request(self, csr):
     resp = self._session.post(self._server, data=csr)
-    assert resp.status_code == requests.codes.ok
-    assert resp.headers['Content-Type'] == 'application/x-pem-file'
+    assert resp.status_code == requests.codes.ok, resp.status_code
+    assert resp.headers['Content-Type'] == 'application/x-pem-file', resp.headers['Content-Type']
     return resp.text
 
 
