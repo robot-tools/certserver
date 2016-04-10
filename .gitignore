@@ -63,3 +63,4 @@ target/
 
 # daemontools coexistance
 run
+log
