@@ -6,6 +6,7 @@ from urllib import parse
 import requests
 from http import server
 import socket
+import ssl
 
 
 parser = argparse.ArgumentParser(description='oauthproxy')
@@ -25,6 +26,16 @@ parser.add_argument(
     type=int,
     action='store',
     default=443)
+parser.add_argument(
+    '--server-key',
+    dest='server_key',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--server-cert',
+    dest='server_cert',
+    action='store',
+    required=True)
 FLAGS = parser.parse_args()
 
 
@@ -34,7 +45,7 @@ class HTTPServer6(server.HTTPServer):
 
 class OAuthProxy(object):
 
-  def __init__(self, listen_host, listen_port, api_key):
+  def __init__(self, listen_host, listen_port, server_key, server_cert, api_key):
     self._api_key = api_key
 
     HANDLERS = {
@@ -52,13 +63,19 @@ class OAuthProxy(object):
           self.end_headers()
 
     self._httpd = HTTPServer6((listen_host, listen_port), RequestHandler)
+    self._httpd.socket = ssl.wrap_socket(
+        self._httpd.socket,
+        keyfile=server_key,
+        certfile=server_cert,
+        server_side=True)
+    self._httpd.socket.settimeout(5.0)
 
   def Serve(self):
     self._httpd.serve_forever()
 
   def _GetFlow(self, req):
     return_url = ''.join([
-      'http://',
+      'https://',
       req.headers['Host'],
       '/oauth2callback',
     ])
@@ -94,6 +111,8 @@ def main():
   server = OAuthProxy(
       FLAGS.listen_host,
       FLAGS.listen_port,
+      FLAGS.server_key,
+      FLAGS.server_cert,
       FLAGS.api_key)
   server.Serve()
 
