@@ -85,6 +85,7 @@ class CertServer(object):
         cert_reqs=ssl.CERT_REQUIRED,
         ssl_version=ssl.PROTOCOL_TLSv1_2,
         ciphers='ECDHE-ECDSA-AES256-GCM-SHA384')
+    self._httpd.settimeout(5.0)
 
   def Serve(self):
     self._httpd.serve_forever()
