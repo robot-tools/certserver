@@ -2,6 +2,7 @@
 
 import argparse
 from oauth2client import client
+import certclient
 import os
 from urllib import parse
 import requests
@@ -21,6 +22,36 @@ parser.add_argument(
 parser.add_argument(
     '--api-key',
     dest='api_key',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--ca-cert',
+    dest='ca_cert',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--certserver-ca-cert',
+    dest='certserver_ca_cert',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--certserver-client-cert',
+    dest='certserver_client_cert',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--certserver-client-key',
+    dest='certserver_client_key',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--certserver',
+    dest='certserver',
+    action='store',
+    required=True)
+parser.add_argument(
+    '--export-password',
+    dest='export_password',
     action='store',
     required=True)
 parser.add_argument(
@@ -58,10 +89,13 @@ class HTTPServer6(server.HTTPServer):
 
 class OAuthProxy(object):
 
-  def __init__(self, listen_host, listen_port, server_key, server_cert, api_key, allowed_domain, subject):
+  def __init__(self, listen_host, listen_port, server_key, server_cert, api_key, allowed_domain, subject, ca_cert, export_password, certclient):
     self._api_key = api_key
     self._allowed_domain = allowed_domain
     self._subject = subject
+    self._ca_cert = ca_cert
+    self._export_password = export_password
+    self._certclient = certclient
 
     HANDLERS = {
       '/': self._ServeRedirect,
@@ -115,7 +149,21 @@ class OAuthProxy(object):
         '-out', csr_path,
         '-subj', self._subject.replace('EMAIL', email),
       ])
-      return open(csr_path, 'rb').read()
+      csr = open(csr_path, 'rb').read()
+      cert = self._certclient.Request(csr)
+      proc = subprocess.Popen([
+        'openssl', 'pkcs12', '-export',
+        '-inkey', key_path,
+        '-certfile', self._ca_cert,
+        '-passout', self._export_password,
+      ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE)
+      proc.stdin.write(cert.encode('ascii'))
+      proc.stdin.close()
+      ret = proc.stdout.read()
+      assert proc.wait() == 0
+      return ret
 
   def _ServeRedirect(self, req):
     req.send_response(302)
@@ -139,11 +187,18 @@ class OAuthProxy(object):
     assert email.endswith('@%s' % self._allowed_domain)
     result = self._GetCert(email)
     req.send_response(200)
+    req.send_header('Content-Type', 'application/x-pkcs12')
+    req.send_header('Content-Disposition', 'attachment; filename=%s.pfx' % email)
     req.end_headers()
     req.wfile.write(result)
 
 
 def main():
+  client = certclient.CertClient(
+      FLAGS.certserver,
+      FLAGS.certserver_ca_cert,
+      FLAGS.certserver_client_cert,
+      FLAGS.certserver_client_key)
   server = OAuthProxy(
       FLAGS.listen_host,
       FLAGS.listen_port,
@@ -151,7 +206,10 @@ def main():
       FLAGS.server_cert,
       FLAGS.api_key,
       FLAGS.allowed_domain,
-      FLAGS.subject)
+      FLAGS.subject,
+      FLAGS.ca_cert,
+      FLAGS.export_password,
+      client)
   server.Serve()
 
 

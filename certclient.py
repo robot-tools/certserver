@@ -26,7 +26,6 @@ parser.add_argument(
     dest='server',
     action='store',
     required=True)
-FLAGS = parser.parse_args()
 
 
 class CertClient(object):
@@ -58,4 +57,5 @@ def main():
 
 
 if __name__ == '__main__':
+  FLAGS = parser.parse_args()
   main()
