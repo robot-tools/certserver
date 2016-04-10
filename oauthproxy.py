@@ -50,6 +50,11 @@ parser.add_argument(
     action='store',
     required=True)
 parser.add_argument(
+    '--client-secrets',
+    dest='client_secrets',
+    action='store',
+    required=True)
+parser.add_argument(
     '--export-password',
     dest='export_password',
     action='store',
@@ -89,7 +94,8 @@ class HTTPServer6(server.HTTPServer):
 
 class OAuthProxy(object):
 
-  def __init__(self, listen_host, listen_port, server_key, server_cert, api_key, allowed_domain, subject, ca_cert, export_password, certclient):
+  def __init__(self, listen_host, listen_port, server_key, server_cert, client_secrets, api_key, allowed_domain, subject, ca_cert, export_password, certclient):
+    self._client_secrets = client_secrets
     self._api_key = api_key
     self._allowed_domain = allowed_domain
     self._subject = subject
@@ -129,7 +135,7 @@ class OAuthProxy(object):
       '/oauth2callback',
     ])
     return client.flow_from_clientsecrets(
-        'client_secrets.json',
+        self._client_secrets,
         login_hint=self._allowed_domain,
         scope='https://www.googleapis.com/auth/userinfo.email',
         redirect_uri=return_url)
@@ -138,25 +144,25 @@ class OAuthProxy(object):
     with tempfile.TemporaryDirectory() as td:
       key_path = os.path.join(td, 'key.pem')
       subprocess.check_call([
-        'openssl', 'ecparam', '-genkey',
-        '-name', 'secp384r1',
-        '-out', key_path,
+          'openssl', 'ecparam', '-genkey',
+          '-name', 'secp384r1',
+          '-out', key_path,
       ])
       csr_path = os.path.join(td, 'csr.pem')
-      subprocess.check_call([
-        'openssl', 'req', '-new',
-        '-key', key_path,
-        '-out', csr_path,
-        '-subj', self._subject.replace('EMAIL', email),
-      ])
-      csr = open(csr_path, 'rb').read()
+      proc = subprocess.Popen([
+          'openssl', 'req', '-new',
+          '-key', key_path,
+          '-subj', self._subject.replace('EMAIL', email),
+        ],
+        stdout=subprocess.PIPE)
+      csr = proc.stdout.read()
       cert = self._certclient.Request(csr)
       proc = subprocess.Popen([
-        'openssl', 'pkcs12', '-export',
-        '-inkey', key_path,
-        '-certfile', self._ca_cert,
-        '-passout', self._export_password,
-      ],
+          'openssl', 'pkcs12', '-export',
+          '-inkey', key_path,
+          '-certfile', self._ca_cert,
+          '-passout', self._export_password,
+        ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE)
       proc.stdin.write(cert.encode('ascii'))
@@ -204,6 +210,7 @@ def main():
       FLAGS.listen_port,
       FLAGS.server_key,
       FLAGS.server_cert,
+      FLAGS.client_secrets,
       FLAGS.api_key,
       FLAGS.allowed_domain,
       FLAGS.subject,
