@@ -37,7 +37,7 @@ class CertClient(object):
     self._session.headers.update({
       'Content-Type': 'application/x-pem-file',
     })
-    self._server = server
+    self._server = 'https://%s' % server
 
   def Request(self, csr):
     resp = self._session.post(self._server, data=csr)
